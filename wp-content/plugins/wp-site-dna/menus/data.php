@@ -5,7 +5,7 @@ defined( 'ABSPATH' ) || die();
 function get_menus_data() {
     $items = array (
         array (
-            'name' => 'Header Menu', 'slug' => 'header-menu', 'build' => 1,
+            'name' => 'Main Menu', 'slug' => 'main-menu', 'build' => 1,
             'items' => array (
                 array ( 'title' => 'Home', 'slug' => '', 'build' => 1 ), //slug should be empty
                 array ( 'title' => 'Blog', 'slug' => 'blog', 'build' => 1 ),

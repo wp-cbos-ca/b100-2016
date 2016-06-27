@@ -5,7 +5,7 @@ defined( 'ABSPATH' ) || die();
 /**
 * As working with widgets the way they are currently set up is quite 
 * difficult, the approach taken here is simply to take the output from
-* the widgets we wish to modify it, store it exactly as is in an array,
+* the widgets we wish to modify, store it exactly as is in an array,
 * and then update the option value with that array. This means we are 
 * as close to a one to one correspondence as we can get. Note that 
 * the individual widget data is "one level down" to allow for the addition
@@ -13,7 +13,7 @@ defined( 'ABSPATH' ) || die();
 * 
 */
 function get_widget_theme_data() { 
-    $items = array( 'title' => 'Twenty Twelve', 'name' => 'twentytwelve' );
+    $items = array( 'title' => 'Twenty Sixteen', 'name' => 'twentysixteen' );
     return $items;
 } 
 

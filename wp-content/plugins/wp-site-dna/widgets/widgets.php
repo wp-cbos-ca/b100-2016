@@ -8,7 +8,7 @@ $sidebars_widgets = null;
 function configure_widgets() {
     require_once( dirname(__FILE__) . '/data.php' );
     $theme = get_widget_theme_data();
-    if ( $theme['name'] == get_option('template' ) ) {
+    if ( $theme['name'] == get_option( 'template' ) ) {
         update_sidebars_widgets();
         update_widgets();
     }

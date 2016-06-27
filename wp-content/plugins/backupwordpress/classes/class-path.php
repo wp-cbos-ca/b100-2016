@@ -1,17 +1,12 @@
 <?php
-/**
- * @package BackUpWordPress
- * @subpackage BackUpWordPress/classes
- */
 
 namespace HM\BackUpWordPress;
 
 /**
- * The Backup Path class
+ * Manages both the backup path and site root
  *
  * Handles calculating & protecting the directory that backups will be stored in
- *
- * @todo 	Should be a singleton?
+ * as well as the directory that is being backed up
  */
 class Path {
 
@@ -20,15 +15,27 @@ class Path {
 	 *
 	 * @var string $this->path
 	 */
-	protected $path;
+	private $path;
+
+	/**
+	 * The path to the directory that will be backed up
+	 *
+	 * @var string $this->root
+	 */
+	private $root;
 
 	/**
 	 * The path to the directory that backup files are stored in
 	 *
 	 * @var string $this->path
 	 */
-	protected $custom_path;
+	private $custom_path;
 
+	/**
+	 * Contains the instantiated Path instance
+	 *
+	 * @var Path $this->instance
+	 */
 	private static $instance;
 
 	/**
@@ -40,16 +47,12 @@ class Path {
 	/**
 	 * Private clone method to prevent cloning of the instance of the
 	 * *Singleton* instance.
-	 *
-	 * @return void
 	 */
 	private function __clone() {}
 
 	/**
 	 * Private unserialize method to prevent unserializing of the *Singleton*
 	 * instance.
-	 *
-	 * @return void
 	 */
 	private function __wakeup() {}
 
@@ -70,9 +73,64 @@ class Path {
 	}
 
 	/**
-	 * Get the path to the directory where backups will be stored
+	 * Convenience method for quickly grabbing the path
 	 */
-	public function get_path() {
+	public static function get_path() {
+		return self::get_instance()->get_calculated_path();
+	}
+
+	/**
+	 * Convenience method for quickly grabbing the root
+	 */
+	public static function get_root() {
+		return self::get_instance()->get_calculated_root();
+	}
+
+	/**
+	 * Calculate the path to the site "home" directory.
+	 *
+	 * The home directory is the path equivalent to the home_url. That is,
+	 * the path to the true root of the website. In situations where WordPress is
+	 * installed in a subdirectory the home path is different to ABSPATH
+	 *
+	 * @param string $site_path The site_path to use when calculating the home path, defaults to ABSPATH
+	 */
+	public static function get_home_path( $site_path = ABSPATH ) {
+
+		if ( defined( 'HMBKP_ROOT' ) && HMBKP_ROOT ) {
+			return wp_normalize_path( HMBKP_ROOT );
+		}
+
+		$home_path = wp_normalize_path( $site_path );
+
+		if ( path_in_php_open_basedir( dirname( $site_path ) ) ) {
+
+			$home    = set_url_scheme( get_option( 'home' ), 'http' );
+			$siteurl = set_url_scheme( get_option( 'siteurl' ), 'http' );
+			if ( ! empty( $home ) && 0 !== strcasecmp( $home, $siteurl ) ) {
+				$wp_path_rel_to_home = str_ireplace( $home, '', $siteurl ); /* $siteurl - $home */
+				$pos = strripos( wp_normalize_path( $_SERVER['SCRIPT_FILENAME'] ), trailingslashit( $wp_path_rel_to_home ) );
+				$home_path = substr( wp_normalize_path( $_SERVER['SCRIPT_FILENAME'] ), 0, $pos );
+				$home_path = trailingslashit( $home_path );
+			}
+
+			if ( is_multisite() ) {
+				$slashed_home      = trailingslashit( get_option( 'home' ) );
+				$base              = parse_url( $slashed_home, PHP_URL_PATH );
+				$document_root_fix = wp_normalize_path( realpath( $_SERVER['DOCUMENT_ROOT'] ) );
+				$abspath_fix       = wp_normalize_path( ABSPATH );
+				$home_path         = strpos( $abspath_fix, $document_root_fix ) === 0 ? $document_root_fix . $base : $home_path;
+			}
+		}
+
+		return wp_normalize_path( untrailingslashit( $home_path ) );
+
+	}
+
+	/**
+	 * get the calculated path to the directory where backups will be stored
+	 */
+	private function get_calculated_path() {
 
 		// Calculate the path if needed
 		if ( empty( $this->path ) || ! wp_is_writable( $this->path ) ) {
@@ -100,15 +158,43 @@ class Path {
 
 	}
 
+	/**
+	 * get the calculated path to the directory that will be backed up
+	 */
+	private function get_calculated_root() {
+
+		$root = self::get_home_path();
+
+		if ( defined( 'HMBKP_ROOT' ) && HMBKP_ROOT ) {
+			$root = HMBKP_ROOT;
+		}
+
+		if ( $this->root ) {
+			$root = $this->root;
+		}
+
+		return wp_normalize_path( $root );
+
+	}
+
+	/**
+	 * Set the root path directly, overriding the default
+	 *
+	 * @param $root
+	 */
+	public function set_root( $root ) {
+		$this->root = $root;
+	}
+
 	public function reset_path() {
-		$this->set_path( false );
+		$this->path = $this->custom_path = '';
 	}
 
 	/**
 	 * Get the path to the default backup location in wp-content
 	 */
 	public function get_default_path() {
-		return trailingslashit( WP_CONTENT_DIR ) . 'backupwordpress-' . substr( HMBKP_SECURE_KEY, 0, 10 ) . '-backups';
+		return trailingslashit( wp_normalize_path( WP_CONTENT_DIR ) ) . 'backupwordpress-' . substr( HMBKP_SECURE_KEY, 0, 10 ) . '-backups';
 	}
 
 	/**
@@ -118,7 +204,7 @@ class Path {
 
 		$upload_dir = wp_upload_dir();
 
-		return trailingslashit( $upload_dir['basedir'] ) . 'backupwordpress-' . substr( HMBKP_SECURE_KEY, 0, 10 ) . '-backups';
+		return trailingslashit( wp_normalize_path( $upload_dir['basedir'] ) ) . 'backupwordpress-' . substr( HMBKP_SECURE_KEY, 0, 10 ) . '-backups';
 
 	}
 
@@ -157,6 +243,7 @@ class Path {
 		}
 
 		$paths = array_merge( $default, $fallback );
+		$paths = array_map( 'wp_normalize_path', $paths );
 
 		return $paths;
 
@@ -208,18 +295,23 @@ class Path {
 
 		// Loop through possible paths, use the first one that exists/can be created and is writable
 		foreach ( $paths as $path ) {
-			if ( wp_mkdir_p( $path ) ) { // Also handles fixing perms / directory already exists
+			if ( wp_mkdir_p( $path ) && wp_is_writable( $path ) ) { // Also handles fixing perms / directory already exists
 				break;
 			}
 		}
 
-		if ( isset( $path ) ) {
+		if ( file_exists( $path ) && wp_is_writable( $path ) ) {
 			$this->path = $path;
 		}
 
 	}
 
 	/**
+	 * Protect the directory that backups are stored in
+	 *
+	 * - Adds an index.html file in an attempt to disable directory browsing
+	 * - Adds a .httaccess file to deny direct access if on Apache
+	 *
 	 * @param string $reset
 	 */
 	public function protect_path( $reset = 'no' ) {
@@ -229,7 +321,7 @@ class Path {
 		// Protect against directory browsing by including an index.html file
 		$index = $this->path . '/index.html';
 
-		if ( ( 'reset' === $reset ) && file_exists( $index ) ) {
+		if ( 'reset' === $reset && file_exists( $index ) ) {
 			@unlink( $index );
 		}
 
@@ -283,7 +375,6 @@ class Path {
 	 * location
 	 *
 	 * @param string $path 	The path to move the backups from
-	 * @return void
 	 */
 	public function move_old_backups( $from ) {
 
@@ -291,7 +382,7 @@ class Path {
 			return;
 		}
 
-		if ( ! wp_is_writable( $this->get_path() ) ) {
+		if ( ! wp_is_writable( Path::get_path() ) ) {
 			return;
 		}
 
@@ -305,14 +396,12 @@ class Path {
 				if ( 'zip' === pathinfo( $file, PATHINFO_EXTENSION ) ) {
 
 					// Try to move them
-					if ( ! @rename( trailingslashit( $from ) . $file, trailingslashit( $this->get_path() ) . $file ) ) {
-
+					if ( ! @rename( trailingslashit( $from ) . $file, trailingslashit( Path::get_path() ) . $file ) ) {
 
 						// If we can't move them then try to copy them
-						copy( trailingslashit( $from ) . $file, trailingslashit( $this->get_path() ) . $file );
+						copy( trailingslashit( $from ) . $file, trailingslashit( Path::get_path() ) . $file );
 
 					}
-
 				}
 			}
 
@@ -321,8 +410,8 @@ class Path {
 		}
 
 		// Delete the old directory if it's inside WP_CONTENT_DIR
-		if ( false !== strpos( $from, WP_CONTENT_DIR ) && $from !== $this->get_path() ) {
-			hmbkp_rmdirtree( $from );
+		if ( false !== strpos( $from, WP_CONTENT_DIR ) &&  Path::get_path() !== $from ) {
+			rmdirtree( $from );
 		}
 
 	}
@@ -333,11 +422,11 @@ class Path {
 	public function cleanup() {
 
 		// Don't cleanup a custom path, who knows what other stuff is there
-		if ( $this->get_path() === $this->get_custom_path() ) {
+		if ( Path::get_path() === $this->get_custom_path() ) {
 			return;
 		}
 
-		foreach ( new CleanUpIterator( new \DirectoryIterator( $this->path ) ) as $file ) {
+		foreach ( new CleanUpIterator( new \DirectoryIterator( Path::get_path() ) ) as $file ) {
 
 			if ( $file->isDot() || ! $file->isReadable() || ! $file->isFile() ) {
 				continue;
@@ -346,15 +435,31 @@ class Path {
 			@unlink( $file->getPathname() );
 
 		}
-
 	}
-
 }
 
 class CleanUpIterator extends \FilterIterator {
 
-	// Don't match index.html,files with zip extension or status logfiles.
+	// Don't match index.html, files with zip extension or status logfiles.
 	public function accept() {
-		return ! preg_match( '/(index\.html|.*\.zip|.*-running)/', $this->current() );
+
+		// Don't remove existing backups
+		if ( 'zip' === pathinfo( $this->current()->getFilename(), PATHINFO_EXTENSION ) ) {
+			return false;
+		}
+
+		// Don't remove the index.html file
+		if ( 'index.html' === $this->current()->getBasename() ) {
+			return false;
+		}
+
+		// Don't remove the file manifest
+		if ( '.files' === $this->current()->getBasename() ) {
+			return false;
+		}
+
+		// Don't cleanup the backup running file
+		return ! preg_match( '/(.*-running)/', $this->current() );
+
 	}
 }

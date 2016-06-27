@@ -1,13 +1,19 @@
+<?php
+
+namespace HM\BackUpWordPress;
+
+?>
+
 <h3><?php esc_html_e( 'Settings', 'backupwordpress' ); ?></h3>
 
-<?php $hmbkp_form_errors = hmbkp_get_settings_errors(); ?>
+<?php $hmbkp_form_errors = get_settings_errors(); ?>
 
 <?php if ( ! empty( $hmbkp_form_errors ) ) { ?>
 
 	<div id="hmbkp-warning" class="error settings-error">
 
 		<?php foreach ( $hmbkp_form_errors as $error ) { ?>
-			<p><strong><?php echo esc_html( $error ); ?></strong></p>
+			<p><strong><?php echo wp_kses_data( $error ); ?></strong></p>
 		<?php } ?>
 
 	</div>
@@ -15,7 +21,7 @@
 <?php }
 
 // We can clear them now we've displayed them
-hmbkp_clear_settings_errors();
+clear_settings_errors();
 
 ?>
 
@@ -64,7 +70,7 @@ hmbkp_clear_settings_errors();
 
 						<option value="manually"><?php _e( 'Manual Only', 'backupwordpress' ); ?></option>
 
-						<?php foreach ( $schedule->get_cron_schedules() as $cron_schedule => $cron_details ) : ?>
+						<?php foreach ( get_cron_schedules() as $cron_schedule => $cron_details ) : ?>
 
 								<option <?php selected( $schedule->get_reoccurrence(), $cron_schedule ); ?> value="<?php echo esc_attr( $cron_schedule ); ?>">
 
@@ -80,9 +86,9 @@ hmbkp_clear_settings_errors();
 
 			</tr>
 
-			<?php if ( ! $start_time = $schedule->get_schedule_start_time( false ) ) {
+			<?php if ( ! $start_time = $schedule->get_schedule_start_time( false ) ) :
 				$start_time = time();
-			} ?>
+			endif; ?>
 
 			<?php $start_date_array = date_parse( date_i18n( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), $start_time ) ); ?>
 
@@ -103,7 +109,7 @@ hmbkp_clear_settings_errors();
 							'thursday'  => __( 'Thursday',  'backupwordpress' ),
 							'friday'    => __( 'Friday',    'backupwordpress' ),
 							'saturday'  => __( 'Saturday',  'backupwordpress' ),
-							'sunday'    => __( 'Sunday',    'backupwordpress' )
+							'sunday'    => __( 'Sunday',    'backupwordpress' ),
 						);
 
 						foreach ( $weekdays as $key => $day ) : ?>
@@ -149,7 +155,7 @@ hmbkp_clear_settings_errors();
 						<?php _e( 'Minutes', 'backupwordpress' ); ?></label>
 
 					</span>
-					
+
 					<p class="description">
 						<?php esc_html_e( '24-hour format.', 'backupwordpress' ); ?>
 						<span class="twice-js <?php if ( $schedule->get_reoccurrence() !== 'fortnightly' ) { ?> hidden<?php } ?>"><?php _e( 'The second backup will run 12 hours after the first.', 'backupwordpress' ); ?><span>
@@ -173,9 +179,13 @@ hmbkp_clear_settings_errors();
 
 						<?php printf( __( 'Past this limit older backups will be deleted automatically.', 'backupwordpress' ) ); ?>
 
-						<?php if ( $schedule->is_site_size_cached() ) {
-							printf( __( 'This schedule will store a maximum of %s of backups.', 'backupwordpress' ), '<code>' . esc_html( size_format( $schedule->get_site_size() * $schedule->get_max_backups() ) ) . '</code>' );
-						} ?>
+						<?php
+
+						$site_size = new Site_Size;
+
+						if ( $site_size->is_site_size_cached() ) :
+							printf( __( 'This schedule will store a maximum of %s of backups.', 'backupwordpress' ), '<code>' . esc_html( size_format( $site_size->get_site_size( $schedule->get_type(), $schedule->get_excludes() ) * $schedule->get_max_backups() ) ) . '</code>' );
+						endif; ?>
 
 					</p>
 
@@ -183,17 +193,14 @@ hmbkp_clear_settings_errors();
 
 			</tr>
 
-			<?php foreach ( HM\BackUpWordPress\Services::get_services( $schedule ) as $service ) {
+			<?php foreach ( Services::get_services( $schedule ) as $service ) :
 				$service->field();
-			} ?>
+			endforeach; ?>
 
 		</tbody>
 
 	</table>
 
-	<p class="submit">
-		<button type="submit" class="button-primary"><?php _e( 'Done', 'backupwordpress' ); ?></button>
-	</p>
-
+	<?php submit_button( __( 'Done', 'backupwordpress' ) ); ?>
 
 </form>

@@ -6,7 +6,7 @@ namespace HM\BackUpWordPress;
  * Class Plugin
  */
 final class Plugin {
-	const PLUGIN_VERSION = '3.3.2';
+	const PLUGIN_VERSION = '3.6.1';
 
 	/**
 	 * @var Plugin The singleton instance.
@@ -18,6 +18,14 @@ final class Plugin {
 	 */
 	private function __construct() {
 		add_action( 'plugins_loaded', array( $this, 'plugins_loaded' ) );
+
+		$hide_notice = get_site_option( 'hmbkp_hide_info_notice', false );
+
+		if ( ! $hide_notice ) {
+			add_action( 'admin_notices', array( $this, 'display_feature_message' ) );
+			add_action( 'network_admin_notices', array( $this, 'display_feature_message' ) );
+		}
+
 	}
 
 	/**
@@ -63,11 +71,13 @@ final class Plugin {
 	 */
 	public function maybe_self_deactivate() {
 
-		if ( false === Setup::meets_requirements() ) {
+		require_once( HMBKP_PLUGIN_PATH . 'classes/class-setup.php' );
 
-			add_action( 'admin_init', array( 'HM\BackUpWordPress\Setup', 'self_deactivate' ) );
+		if ( false === \HMBKP_Setup::meets_requirements() ) {
 
-			add_action( 'all_admin_notices', array( 'HM\BackUpWordPress\Setup', 'display_admin_notices' ) );
+			add_action( 'admin_init', array( '\HMBKP_Setup', 'self_deactivate' ) );
+
+			add_action( 'all_admin_notices', array( '\HMBKP_Setup', 'display_admin_notices' ) );
 
 			return true;
 
@@ -131,12 +141,26 @@ final class Plugin {
 		require_once( HMBKP_PLUGIN_PATH . 'classes/class-requirement.php' );
 
 		require_once( HMBKP_PLUGIN_PATH . 'classes/class-path.php' );
+		require_once( HMBKP_PLUGIN_PATH . 'classes/class-excludes.php' );
+		require_once( HMBKP_PLUGIN_PATH . 'classes/class-site-size.php' );
 
-		// Load the core backup class
-		require_once( HMBKP_PLUGIN_PATH . 'classes/class-backup.php' );
+		require_once( HMBKP_PLUGIN_PATH . 'classes/backup/class-backup-utilities.php' );
+		require_once( HMBKP_PLUGIN_PATH . 'classes/backup/class-backup-status.php' );
+
+		require_once( HMBKP_PLUGIN_PATH . 'classes/backup/class-backup-engine.php' );
+
+		require_once( HMBKP_PLUGIN_PATH . 'classes/backup/class-backup-engine-database.php' );
+		require_once( HMBKP_PLUGIN_PATH . 'classes/backup/class-backup-engine-database-mysqldump.php' );
+		require_once( HMBKP_PLUGIN_PATH . 'classes/backup/class-backup-engine-database-imysqldump.php' );
+
+		require_once( HMBKP_PLUGIN_PATH . 'classes/backup/class-backup-engine-file.php' );
+		require_once( HMBKP_PLUGIN_PATH . 'classes/backup/class-backup-engine-file-zip.php' );
+		require_once( HMBKP_PLUGIN_PATH . 'classes/backup/class-backup-engine-file-zip-archive.php' );
+
+		require_once( HMBKP_PLUGIN_PATH . 'classes/backup/class-backup.php' );
 
 		// Load the backup scheduling classes
-		require_once( HMBKP_PLUGIN_PATH . 'classes/class-schedule.php' );
+		require_once( HMBKP_PLUGIN_PATH . 'classes/class-scheduled-backup.php' );
 		require_once( HMBKP_PLUGIN_PATH . 'classes/class-schedules.php' );
 
 		// Load the core functions
@@ -155,6 +179,8 @@ final class Plugin {
 		require_once( HMBKP_PLUGIN_PATH . 'classes/class-wpremote-webhook-service.php' );
 
 		require_once( HMBKP_PLUGIN_PATH . 'classes/deprecated.php' );
+
+		require_once( HMBKP_PLUGIN_PATH . 'classes/class-extensions.php' );
 
 		// Load the wp cli command
 		if ( defined( 'WP_CLI' ) && WP_CLI ) {
@@ -216,7 +242,7 @@ final class Plugin {
 				'delete_schedule'          => __( 'Are you sure you want to delete this schedule? All of its backups will also be deleted.', 'backupwordpress' ) . "\n\n" . __( '\'Cancel\' to go back, \'OK\' to delete.', 'backupwordpress' ) . "\n",
 				'delete_backup'            => __( 'Are you sure you want to delete this backup?', 'backupwordpress' ) . "\n\n" . __( '\'Cancel\' to go back, \'OK\' to delete.', 'backupwordpress' ) . "\n",
 				'remove_exclude_rule'      => __( 'Are you sure you want to remove this exclude rule?', 'backupwordpress' ) . "\n\n" . __( '\'Cancel\' to go back, \'OK\' to delete.', 'backupwordpress' ) . "\n",
-				'remove_old_backups'       => __( 'Reducing the number of backups that are stored on this server will cause some of your existing backups to be deleted. Are you sure that\'s what you want?', 'backupwordpress' ) . "\n\n" . __( '\'Cancel\' to go back, \'OK\' to delete.', 'backupwordpress' ) . "\n"
+				'remove_old_backups'       => __( 'Reducing the number of backups that are stored on this server will cause some of your existing backups to be deleted. Are you sure that\'s what you want?', 'backupwordpress' ) . "\n\n" . __( '\'Cancel\' to go back, \'OK\' to delete.', 'backupwordpress' ) . "\n",
 			)
 		);
 
@@ -253,7 +279,7 @@ final class Plugin {
 
 		// Fire the update action
 		if ( self::PLUGIN_VERSION != get_option( 'hmbkp_plugin_version' ) ) {
-			hmbkp_update();
+			update();
 		}
 
 	}
@@ -273,6 +299,12 @@ final class Plugin {
 	 * @return string
 	 */
 	protected function generate_key() {
+
+		$check = apply_filters( 'hmbkp_generate_key', null );
+
+		if ( null !== $check ) {
+			return $check;
+		}
 
 		$key = array( ABSPATH, time() );
 		$constants = array( 'AUTH_KEY', 'SECURE_AUTH_KEY', 'LOGGED_IN_KEY', 'NONCE_KEY', 'AUTH_SALT', 'SECURE_AUTH_SALT', 'LOGGED_IN_SALT', 'NONCE_SALT', 'SECRET_KEY' );
@@ -319,7 +351,7 @@ final class Plugin {
 	 */
 	public function schedule_hook_run( $schedule_id ) {
 
-		if ( ! hmbkp_possible() ) {
+		if ( ! is_backup_possible() ) {
 			return;
 		}
 
@@ -341,7 +373,7 @@ final class Plugin {
 	 */
 	public function styles( $hook ) {
 
-		if ( HMBKP_ADMIN_PAGE !== $hook ) {
+		if ( 'tools_page_backupwordpress_extensions' !== $hook && HMBKP_ADMIN_PAGE !== $hook ) {
 			return;
 		}
 
@@ -394,9 +426,41 @@ final class Plugin {
 
 	<?php }
 
+	public function display_feature_message() {
+
+		$current_screen = get_current_screen();
+
+		if ( ! isset( $current_screen ) ) {
+			return;
+		}
+
+		$page = is_multisite() ? HMBKP_ADMIN_PAGE . '-network' : HMBKP_ADMIN_PAGE;
+		if ( $current_screen->id !== $page ) {
+			return;
+		}
+
+		/* translators: %1$s and %2$s expand to anchor tags linking to the new extensions page. */
+		$info_message = sprintf(
+			__( 'Thanks for updating BackUpWordPress, why not check out %1$sour extensions?%2$s', 'backupwordpress' ),
+			'<a href="' . esc_url( get_settings_url( HMBKP_PLUGIN_SLUG . '_extensions' ) ) . '">',
+			'</a>'
+		);
+		?>
+
+		<div id="hmbkp-info-message" class="updated notice is-dismissible">
+
+			<p><?php echo wp_kses_post( $info_message ); ?></p>
+
+			<button type="button" class="notice-dismiss"><span class="screen-reader-text"><?php esc_html_e( 'Dismiss this notice.', 'backupwordpress' ); ?></span></button>
+
+		</div>
+
+	<?php }
+
 }
 
 if ( is_multisite() && ! is_main_site() ) {
 	return;
 }
+
 Plugin::get_instance();
